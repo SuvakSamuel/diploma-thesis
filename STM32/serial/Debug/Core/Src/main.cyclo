@@ -1,0 +1,11 @@
+../Core/Src/main.c:299:6:transmitBuffer	3
+../Core/Src/main.c:313:6:USBReceiveHandler	3
+../Core/Src/main.c:361:5:main	2
+../Core/Src/main.c:415:6:SystemClock_Config	3
+../Core/Src/main.c:461:13:MX_CRC_Init	2
+../Core/Src/main.c:487:13:MX_I2C1_Init	2
+../Core/Src/main.c:521:13:MX_I2S3_Init	2
+../Core/Src/main.c:555:13:MX_RNG_Init	2
+../Core/Src/main.c:581:13:MX_SPI1_Init	2
+../Core/Src/main.c:619:13:MX_GPIO_Init	1
+../Core/Src/main.c:720:6:Error_Handler	1
