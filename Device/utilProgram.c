@@ -231,7 +231,7 @@ int aes_decrypt(const unsigned char *ciphertext, int ciphertext_len,
     EVP_CIPHER_CTX_free(ctx);
     return 1;
 }
-/*
+
 char* nvread() {
     TSS2_RC rc;
     ESYS_CONTEXT *ectx;
@@ -273,30 +273,36 @@ char* nvread() {
     Esys_Finalize(&ectx);
     return nvString;
 }
-*/
+
 int sign_sha256_hash(uint8_t hash[SHA256_DIGEST_LENGTH], EVP_PKEY *pkey,
                      uint8_t **signature, size_t *sig_len) {
     RSA *rsa = EVP_PKEY_get1_RSA(pkey);
     if (!rsa) return 0;
 
-    *signature = malloc(RSA_size(rsa));
+    int rsa_size = RSA_size(rsa);
+    *signature = malloc(rsa_size);
     if (!*signature) {
         RSA_free(rsa);
         return 0;
     }
 
-    unsigned int sig_len_tmp = 0;
-    int success = RSA_sign(NID_sha256, hash, SHA256_DIGEST_LENGTH,
-                           *signature, &sig_len_tmp, rsa);
+    // PKCS#1 v1.5 sifrovanie hashu sukromnym klucom zariadenia
+    int ret = RSA_private_encrypt(
+        32,                 // dlzka vstupu, teda dlzka SHA256 hashu
+        hash,               // vstup, teda hash spravy c. 5
+        *signature,         // vystup buffer
+        rsa,                // RSA kluc
+        RSA_PKCS1_PADDING   // PKCS#1 v1.5 padding
+    );
 
     RSA_free(rsa);
 
-    if (!success) {
+    if (ret <= 0) {
         free(*signature);
         *signature = NULL;
         return 0;
     }
 
-    *sig_len = sig_len_tmp;
+    *sig_len = (size_t)ret;
     return 1;
 }

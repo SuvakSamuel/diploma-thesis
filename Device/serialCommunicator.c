@@ -48,7 +48,7 @@ int main() {
     tty.c_lflag &= ~ECHOE; // vypni erasure
     tty.c_lflag &= ~ECHONL; // vypni new-line echo
     tty.c_lflag &= ~ISIG; // vypni interpretaciu INTR, QUIT and SUSP
-    tty.c_oflag = 0; // VYPNI POST-PROCESSING, SKURVENA PICOVINA MENILA \n NA KOKOTINY
+    tty.c_oflag = 0; // vypni post-processing, menil \n NA blbosti
     tty.c_cc[VTIME] = 255;
 
     // aplikujeme nastavenia
@@ -57,6 +57,7 @@ int main() {
         close(serial_port);
         return 1;
     }
+
     // -----------------------------------------------------------------------------------------------------------------
     // urobim si a poslem prvu spravu
     MessageOne firstMessage = {{ 'H', 'e', 'l', 'o' }};
@@ -68,18 +69,21 @@ int main() {
     }
     unsigned char returnSign = '\r';
     write(serial_port, &returnSign, 1);
+
     // -----------------------------------------------------------------------------------------------------------------
     // prijimam druhu spravu
     uint8_t receiveBuffer[64];
     memset(&receiveBuffer, 0, sizeof(receiveBuffer));
     MessageTwo secondMessage = {};
-    // na strane tokenu sa implementoval kod co limituje velkost USB CDC paketu na 64 bytov
+
+    // na strane tokenu sa implementoval kod co rozkuskuje velkost USB CDC paketu na 64 bytov
     // staci mat teda receiveBuffer velkosti 64 bytov
     // tento prvy read obsahuje data suvisiace s druhou spravou, velkostou spravy a velkostou certifikatu tokenu - 18 bytov
     ssize_t bytes_read = read(serial_port, receiveBuffer, sizeof(receiveBuffer));
     if (bytes_read < 0) {
         perror("Chyba pri citani zo serioveho portu");
     }
+
     // nasleduju veci ako odpoved dosky a jej ID
     for (int i = 0; i < 4; i++) {
         secondMessage.replyChars[i] = receiveBuffer[i];
@@ -87,6 +91,7 @@ int main() {
         secondMessage.Tid_two[i] = receiveBuffer[i + 8];
         secondMessage.Tid_three[i] = receiveBuffer[i + 12];
     }
+
     // nasleduje dlzka certifikatu tokenu
     uint16_t tokenCertLen = (receiveBuffer[16] << 8) | receiveBuffer[17];
     // alokujem pamat
@@ -95,6 +100,7 @@ int main() {
         perror("malloc zlyhal");
         exit(1);
     }
+
     // zvysok uz je certifikat tokenu
     // tieto data vieme direktne kopirovat do pamati vyhradenej pre certifikat tokenu
     memcpy(tokenCert, receiveBuffer + 18, bytes_read - 18);
@@ -108,6 +114,8 @@ int main() {
         }
         totalTokenRead += n;       
     }
+
+    // kontrola prijatych uvodnych znakov a certifikatu tokenu
     if (memcmp(firstMessage.initChars, secondMessage.replyChars, sizeof(secondMessage.replyChars)) != 0) {
 		printf("Token sa neodzdravil spravne, zatvaram seriovy port.\n");
         close(serial_port);
@@ -121,6 +129,7 @@ int main() {
         free(tokenCert);
         return 0;
     }
+
     // -----------------------------------------------------------------------------------------------------------------
     // pripravim si tretiu spravu
     MessageThree thirdMessage = {};
@@ -129,27 +138,32 @@ int main() {
 	thirdMessage.timestamp[1] = (epoch & 0x0000ff00) >> 8;
 	thirdMessage.timestamp[2] = (epoch & 0x00ff0000) >> 16;
 	thirdMessage.timestamp[3] = (epoch & 0xff000000) >> 24;
+
 	// session key aj IV nahodne generujeme z /dev/urandom, TENTO JE PRE STVRTU, PIATU A SIESTU SPRAVU
     urandom_random_bytes(thirdMessage.session_key);
     urandom_random_bytes(thirdMessage.session_IV);
+
     // ID tokenu tentokrat staci len skopirovat
     for (int i = 0; i < 4; i++) {
         thirdMessage.Tid_one[i] = secondMessage.Tid_one[i];
         thirdMessage.Tid_two[i] = secondMessage.Tid_two[i];
         thirdMessage.Tid_three[i] = secondMessage.Tid_three[i];
     }
-    // nakoniec ID zariadenia - z NV indexov TPM, potrebne je sudo
-    /*char* hash = nvread();*/
-    char* hash = "876f88001a970a5171e27688a276ff71";
+
+    // nakoniec ID zariadenia - z NV indexov TPM, potrebne je sudo aby nvread fungoval
+    char* hash = nvread();
     // XORneme tento hash
     for (int i = 0; i < 8; i++) {
         thirdMessage.PC_id[i] = hash[i] ^ hash[i + 8];
     }
+
     // sifrujeme a odosielame tretiu spravu. najprv verejny kluc extrahujme
     EVP_PKEY *pubkey = extract_pubkey(tokenCert, tokenCertLen);
+
     // data v MessageThree strukture dajme do buffra a vyplnme nulami na velkost 512 bitov
     unsigned char paddedPlaintext[512] = {0};
     memcpy(paddedPlaintext, &thirdMessage, sizeof(thirdMessage));
+
     // AES sifrovanie tohto buffra, 128-bit velkost bloku, TIETO HODNOTY PLATIA IBA PRE TRETIU SPRAVU
     unsigned char msgthree_aes_key[16];  // 128-bit AES kluc
     unsigned char msgthree_iv[16];       // 128-bit IV (inicializacny vektor)
@@ -158,6 +172,7 @@ int main() {
     unsigned char encrypted[512];
     int encryptedLen = 0;
     aes_encrypt(paddedPlaintext, 512, msgthree_aes_key, msgthree_iv, encrypted, &encryptedLen);
+
     // zasifrujme AES kluc a IV verejnym klucom tokenu, tym padom iba token bude moct desifrovat povodnu spravu
     unsigned char encryptedKey[256]; // velkost RSA kluca v bytoch (2048bit)
     size_t encryptedKeyLen = sizeof(encryptedKey);
@@ -167,6 +182,7 @@ int main() {
     encrypt_with_pubkey(pubkey, msgthree_iv, sizeof(msgthree_iv), encryptedIV, &encryptedIVLen);
     EVP_PKEY_free(pubkey); // mozme uz uvolnit lebo iba raz pouzivame tento verejny kluc na sifrovanie
     free(tokenCert);
+
     // nakoniec to cele hodime do jedneho buffera spolu s certifikatom PC a odosleme to doske
     size_t transmitBufferLen = 1024 + deviceCertLen;
     uint8_t *transmitBuffer = malloc(transmitBufferLen);
@@ -196,6 +212,7 @@ int main() {
     }
     write(serial_port, &returnSign, 1);
     free(transmitBuffer);
+
     // -----------------------------------------------------------------------------------------------------------------
     // prijimam stvrtu spravu
     MessageFour fourthMessage = {};
@@ -220,6 +237,7 @@ int main() {
     memcpy(fourthMessage.Tid_three, &decryptedPayload[12], 4);
     memcpy(fourthMessage.PC_id, &decryptedPayload[16], 8);
     memcpy(fourthMessage.T_nonce, &decryptedPayload[24], 16);
+
     // kontrolujem token id a PC id ci su rovnake
     if(memcmp(thirdMessage.Tid_one, fourthMessage.Tid_one, sizeof(thirdMessage.Tid_one)) != 0 ||
 			memcmp(thirdMessage.Tid_two, fourthMessage.Tid_two, sizeof(thirdMessage.Tid_two)) != 0 ||
@@ -268,11 +286,10 @@ int main() {
     sign_sha256_hash(msgFiveHash, privkey, &sigHash, &sigHashLen);
 
     // veci napratajme do buffera na odoslanie a odoslime
-    size_t msgFiveTransmitBufferLen = 800; // 512 + 256 + 32
+    size_t msgFiveTransmitBufferLen = 768; // 512 + 256
     uint8_t* msgFiveTransmitBuffer = malloc(msgFiveTransmitBufferLen);
     memcpy(msgFiveTransmitBuffer, encrypted, encryptedLen);
     memcpy(msgFiveTransmitBuffer + 512, sigHash, sigHashLen);
-    memcpy(msgFiveTransmitBuffer + 768, msgFiveHash, sizeof(msgFiveHash));
     bytes_sent = 0;
     while (bytes_sent < msgFiveTransmitBufferLen) {
         size_t remaining = msgFiveTransmitBufferLen - bytes_sent;
@@ -290,6 +307,7 @@ int main() {
     }
     write(serial_port, &returnSign, 1);
     free(msgFiveTransmitBuffer);
+
     // -----------------------------------------------------------------------------------------------------------------
     // prijimam siestu, poslednu spravu
     MessageSix sixthMessage = {};
@@ -314,6 +332,7 @@ int main() {
     memcpy(sixthMessage.Tid_three, &decryptedPayload[12], 4);
     memcpy(sixthMessage.PC_id, &decryptedPayload[16], 8);
     memcpy(sixthMessage.key, &decryptedPayload[24], 64);
+
     // kontrolujem token id a PC id ci su rovnake, a ci prijaty timestamp je (povodny timestamp + 3)
     if(memcmp(thirdMessage.Tid_one, fourthMessage.Tid_one, sizeof(thirdMessage.Tid_one)) != 0 ||
 			memcmp(thirdMessage.Tid_two, fourthMessage.Tid_two, sizeof(thirdMessage.Tid_two)) != 0 ||
@@ -332,12 +351,16 @@ int main() {
         close(serial_port);
 		return -1;
     }
+
+    // zavri seriovy port, komunikacia s tokenom skoncila
+    close(serial_port);
+
     // vypis ziskanu druhu cast kluca, ked sa to spusti v shell skripte tak sa to zachyti na spracovanie
     char keyString[65];             // +1 pre null-terminator
     memcpy(keyString, sixthMessage.key, 64);
     keyString[64] = '\0';           // null-terminator
     printf("%s\n", keyString); 
-    // zavri seriovy port a konci main, komunikacia s tokenom skoncila
-    close(serial_port);
+
+    // end program
     return 0;
 }
