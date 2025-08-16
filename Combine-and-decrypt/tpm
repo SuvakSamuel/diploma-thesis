@@ -1,0 +1,28 @@
+#!/bin/sh
+
+set -e
+
+PREREQ=""
+
+prereqs()
+{
+	echo "$PREREQ"
+}
+
+case "$1" in
+	prereqs)
+		prereqs
+		exit 0
+		;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+copy_exec /usr/bin/tpm2_unseal /usr/bin
+copy_exec /sbin/decrypt_root /sbin/
+copy_exec /home/user/kodenie/serialCommApp /home/user/kodenie
+copy_exec /home/user/kodenie/combiner /home/user/kodenie
+
+cp -f /lib/x86_64-linux-gnu/libtss2* $DESTDIR/lib/x86_64-linux-gnu/
+
+exit 0
