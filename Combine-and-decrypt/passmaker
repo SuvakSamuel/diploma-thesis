@@ -1,0 +1,21 @@
+#!/bin/sh
+
+
+
+tpmValue=$(tpm2_unseal -c 0x81000003 -p pcr:sha256:0,2,3,7)
+if [ $? -ne 0 ]
+then
+	echo "Chyba pri tpm2_unseal"
+fi
+
+tokenValue=$(./serialCommApp)
+if [ $? -ne 0 ]
+then
+	echo "Chyba pri serialCommApp"
+fi
+
+./combiner $tpmValue $tokenValue
+if [ $? -eq 0 ]
+then
+	exit 0
+fi

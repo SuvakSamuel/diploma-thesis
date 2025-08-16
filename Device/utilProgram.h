@@ -15,7 +15,7 @@ int encrypt_with_pubkey(EVP_PKEY *pubkey, const unsigned char *plaintext, size_t
 int aes_decrypt(const unsigned char *ciphertext, int ciphertext_len,
                 const unsigned char *key, const unsigned char *iv,
                 unsigned char *plaintext, int *plaintext_len);
-/*char* nvread();*/
+char* nvread();
 int sign_sha256_hash(uint8_t hash[SHA256_DIGEST_LENGTH], EVP_PKEY *pkey,
                      uint8_t **signature, size_t *sig_len);
 
