@@ -94,6 +94,7 @@ uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 
 /* USER CODE BEGIN PRIVATE_VARIABLES */
+// temp pole je iba pre ziskanie/ulozenie parametrov pre danu relaciu seriovej komunikacie
 uint8_t temp[7];
 extern uint16_t receiveCounter;
 extern uint8_t receiveBuffer[2500];
@@ -279,22 +280,22 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   if (*Len == 0 || Buf == NULL) return USBD_OK;
-  // spravy sa prijimaju po 64 bytovych kuskoch - paketoch
-  // po odoslani celej spravy posielam dalsiu, ktora sa sklada iba zo znaku '\r', teda dlzka je 1
-  // teoreticky moze nastat edge case kedy povodna sprava sa tak rozkuskuje
-  // ze posledny byte spravy pride sam a sklada sa iba z '\r' co vtedy by nastal problem, ale je to worth fixing?
-  // uz len to ze som mal edge case ze prijaty paket sa zacina prave na '\r' je celkom uletene
+  // spravy sa prijimaju po 64 bytovych kuskoch - paketoch.
+  // po odoslani celej spravy posielam dalsiu, ktora sa sklada iba zo znaku '\r', teda dlzka je 1.
+  // teoreticky moze nastat edge case kedy povodna sprava sa tak rozkuskuje,
+  // ze posledny byte spravy pride sam a sklada sa iba z '\r' co vtedy by nastal problem, ale pre zatial sa to neoplati riesit.
+  // uz len to ze som mal pripad ze prijaty paket sa zacina prave na '\r' je celkom uletene.
   if (Buf[0] == '\r' && *Len == 1) {
       dataReceivedFlag = 1;
       return USBD_OK;
   }
-  // receiveBuffer ma velkost 2048, nie je to dobre ze je to takto hardcoded
-  // ale iba 3. sprava sa k tomu velkostne blizi
+  // receiveBuffer ma velkost 2500, nie je to dobre ze je to takto hardcoded.
+  // ale iba 3. sprava sa k tomu velkostne blizi.
   if ((receiveCounter + *Len) < 2500) {
       memcpy(&receiveBuffer[receiveCounter], Buf, *Len);
       receiveCounter += *Len;
   } else {
-      // Buffer overflow handler, asi to rovno deletnem jak boss
+      // Buffer overflow handler, to je asi nieco do buducna.
       receiveCounter = 0;
       dataReceivedFlag = 0;
       return USBD_FAIL;

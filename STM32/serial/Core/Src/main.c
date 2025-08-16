@@ -336,14 +336,11 @@ void USBReceiveHandler() {
 	} else {
 		uint8_t* payload = malloc(512);
 		uint8_t* sigHash = malloc(256);
-		uint8_t* hash = malloc(32);
 		memcpy(payload, &receiveBuffer[0], 512);
 		memcpy(sigHash, &receiveBuffer[512], 256);
-		memcpy(hash, &receiveBuffer[768], 32);
-		fifthMessageHandler(payload, sigHash, hash);
+		fifthMessageHandler(payload, sigHash);
 		free(payload);
 		free(sigHash);
-		free(hash);
 		messageCounter = 1;
 	}
 	receiveCounter = 0;

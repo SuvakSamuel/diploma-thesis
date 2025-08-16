@@ -54,7 +54,7 @@ void firstMessageHandler(uint8_t* receivedChars);
 void secondMessageSender();
 void thirdMessageHandler(uint8_t* encryptedKey, uint8_t* encryptedIV, uint8_t* payload, uint8_t* deviceCertBuffer, uint16_t deviceCertLen);
 void fourthMessageSender();
-void fifthMessageHandler(uint8_t* payload, uint8_t* sigHash, uint8_t* hash);
+void fifthMessageHandler(uint8_t* payload, uint8_t* sigHash);
 void sixthMessageSender();
 
 #endif // COMMHANDLER_H
