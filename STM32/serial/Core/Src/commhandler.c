@@ -100,14 +100,15 @@ void secondMessageSender() {
 void thirdMessageHandler(uint8_t* encryptedKey, uint8_t* encryptedIV, uint8_t* payload, uint8_t* deviceCertBuffer, uint16_t deviceCertLen) {
 	// over certifikat zariadenia ci je podpisany CA
 	WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
-    if (wolfSSL_CTX_load_verify_buffer(ctx, CACert, CACertLen, WOLFSSL_FILETYPE_ASN1) != SSL_SUCCESS) {
+	int ret = wolfSSL_CTX_load_verify_buffer(ctx, CACert, CACertLen, WOLFSSL_FILETYPE_ASN1);
+    if (ret != SSL_SUCCESS) {
         return;
     }
     WOLFSSL_CERT_MANAGER* cm = wolfSSL_CTX_GetCertManager(ctx);
     if (!cm) {
         return;
     }
-    int ret = wolfSSL_CertManagerVerifyBuffer(cm, deviceCertBuffer, deviceCertLen, WOLFSSL_FILETYPE_ASN1);
+    ret = wolfSSL_CertManagerVerifyBuffer(cm, deviceCertBuffer, deviceCertLen, WOLFSSL_FILETYPE_ASN1);
     if (ret != SSL_SUCCESS) {
         return;
     }

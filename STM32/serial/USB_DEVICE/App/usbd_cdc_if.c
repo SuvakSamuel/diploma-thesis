@@ -97,7 +97,7 @@ uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 // temp pole je iba pre ziskanie/ulozenie parametrov pre danu relaciu seriovej komunikacie
 uint8_t temp[7];
 extern uint16_t receiveCounter;
-extern uint8_t receiveBuffer[2500];
+extern uint8_t receiveBuffer[2000];
 extern uint8_t dataReceivedFlag;
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -289,9 +289,9 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
       dataReceivedFlag = 1;
       return USBD_OK;
   }
-  // receiveBuffer ma velkost 2500, nie je to dobre ze je to takto hardcoded.
+  // receiveBuffer ma velkost 2000, nie je to dobre ze je to takto hardcoded.
   // ale iba 3. sprava sa k tomu velkostne blizi.
-  if ((receiveCounter + *Len) < 2500) {
+  if ((receiveCounter + *Len) < 2000) {
       memcpy(&receiveBuffer[receiveCounter], Buf, *Len);
       receiveCounter += *Len;
   } else {
