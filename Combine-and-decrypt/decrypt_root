@@ -1,22 +1,65 @@
 #!/bin/sh
 
 
-tpmValue=$(tpm2_unseal -c 0x81000003 -p pcr:sha256:0,2,3,7)
-if [ $? -ne 0 ]
-then
-	/lib/cryptsetup/askpass "$CRYPTTAB_SOURCE ($CRYPTTAB_NAME) FALLBACK PASSWORD: "
+log_error() {
+    echo "[decrypt_root] $1" > /dev/kmsg
+}
+
+ask_password() {
+    /lib/cryptsetup/askpass "$CRYPTTAB_SOURCE ($CRYPTTAB_NAME) FALLBACK PASSWORD: "
+    exit 0
+}
+
+run_and_log() {
+    local cmd="$*"
+    local output
+    output=$($cmd 2>&1)
+    local status=$?
+    if [ $status -ne 0 ]; then
+        log_error "Command failed: $cmd"
+        log_error "Exit code: $status"
+        log_error "Output: $output"
+        return $status
+    fi
+    echo "$output"
+    return 0
+}
+
+tpmValue=$(tpm2_unseal -c 0x81001001 -p pcr:sha256:0,2,3,7)
+if [ $? -ne 0 ]; then
+    log_error "TPM unseal failed, falling back to password"
+    ask_password
 fi
 
-tokenValue=$(./serialCommApp)
-if [ $? -ne 0 ]
-then
-	/lib/cryptsetup/askpass "$CRYPTTAB_SOURCE ($CRYPTTAB_NAME) FALLBACK PASSWORD: "
+TIMEOUT=20  # seconds
+SERIAL=""
+while [ $TIMEOUT -gt 0 ]; do
+    # Pick first available /dev/ttyACM* device
+    SERIAL=$(ls /dev/ttyACM* 2>/dev/null | head -n 1)
+    if [ -n "$SERIAL" ]; then
+        break
+    fi
+    sleep 1
+    TIMEOUT=$((TIMEOUT - 1))
+done
+
+if [ -z "$SERIAL" ]; then
+    log_error "No USB serial device found, falling back to password"
+    ask_password
 fi
 
-./combiner $tpmValue $tokenValue
-if [ $? -eq 0 ]
-then
-	exit 0
+log_error "Using serial device: $SERIAL"
+
+tokenValue=$(run_and_log /sbin/serialCommApp)
+if [ $? -ne 0 ]; then
+    log_error "serialCommApp failed, falling back to password"
+    ask_password
 fi
 
-/lib/cryptsetup/askpass "$CRYPTTAB_SOURCE ($CRYPTTAB_NAME) FALLBACK PASSWORD: "
+run_and_log ./combiner "$tpmValue" "$tokenValue"
+if [ $? -eq 0 ]; then
+    exit 0
+fi
+
+log_error "combiner failed, falling back to password"
+ask_password

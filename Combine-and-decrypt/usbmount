@@ -1,0 +1,19 @@
+#!/bin/sh
+
+DEVICE="/dev/sdc"
+MAPPER_NAME="usbdisk"
+MOUNT_POINT="/mnt/encrypted"
+
+# Separate script which obtains and combines both parts of the master key
+key=$(./decrypt)
+
+if [ $? -ne 0 ] || [ -z "$key" ]; then
+    echo "Failed to retrieve decryption key"
+    exit 1
+fi
+
+# Opening LUKS encrypted USB device using the master key
+echo "$key" | sudo cryptsetup luksOpen "$DEVICE" "$MAPPER_NAME" --key-file=-
+
+# Mounting the unlocked volume
+sudo mount "/dev/mapper/$MAPPER_NAME" "$MOUNT_POINT"

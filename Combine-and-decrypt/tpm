@@ -20,7 +20,18 @@ esac
 
 copy_exec /usr/bin/tpm2_unseal /usr/bin
 copy_exec /sbin/decrypt_root /sbin/
-copy_exec /home/user/kodenie/serialCommApp /home/user/kodenie
-copy_exec /home/user/kodenie/combiner /home/user/kodenie
+copy_exec /home/user/kodenie/serialCommApp /sbin/
+copy_exec /home/user/kodenie/combiner /sbin/
+
+mkdir -p "${DESTDIR}/etc/initramfs-tools"
+echo "usbserial" >> "${DESTDIR}/etc/initramfs-tools/modules"
+echo "cdc_acm" >> "${DESTDIR}/etc/initramfs-tools/modules"
+
+mkdir -p "${DESTDIR}/dev"
+mknod -m 666 "${DESTDIR}/dev/ttyACM1" c 166 1 2>/dev/null || true
+
+cp -f /lib/x86_64-linux-gnu/libtss2* $DESTDIR/lib/x86_64-linux-gnu
+cp -a /home/user/certifikaty/. $DESTDIR/certifikaty/
+chmod 600 $DESTDIR/certifikaty/*
 
 exit 0
