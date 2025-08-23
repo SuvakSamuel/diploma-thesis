@@ -1,0 +1,134 @@
+free c: channel. (* Komunikacny kanal *)
+
+(* Datove typy *)
+type id.
+type key.
+type cert.
+type timestamp.
+
+(* Funkcie *)
+fun encrypt(bitstring, key): bitstring.
+reduc forall m:bitstring, k:key; decrypt(encrypt(m, k), k) = m.
+fun sign(bitstring, key): bitstring.
+fun verify(bitstring, bitstring, key): bitstring.
+fun hash(bitstring): bitstring.
+fun pkOf(cert): key.
+fun toTimestamp(bitstring): timestamp.
+fun ts_add1(timestamp): timestamp.
+fun ts_add2(timestamp): timestamp.
+fun ts_add3(timestamp): timestamp.
+
+(* Konstanty *)
+const kToken, kPC: key.           (* Sukromne kluce *)
+const certToken, certPC: cert.    (* Certifikaty *)
+
+free initMsg: bitstring.          (* Znaky 'H','e','l','o' kondenzovane do jednej premennej *)
+
+(* Bezpecnostne ciele *)
+event begin_A(id, id, key).
+event end_B(id, id, key).
+event begin_B(id, id, key).
+event end_A(id, id, key).
+
+(* Relacny kluc, cim sa sifruje druha cast hlavneho kluca *)
+free sessionKey: key [private].
+
+(* Utajenie relacneho kluca *)
+query attacker(sessionKey).
+
+(* Autentifikacne dopyty *)
+query x:id, y:id, k:key; event(end_A(x, y, k)) ==> event(begin_B(x, y, k)).
+query x:id, y:id, k:key; event(end_B(x, y, k)) ==> event(begin_A(x, y, k)).
+
+(* Vypoctove zariadenie (PC): A *)
+let A() =
+  (* sprava 1 odoslanie*)
+  out(c, initMsg);
+
+  (* sprava 2 prijem, ID B and certifikat *)
+  in(c, (initMsg2: bitstring, idB: id, certTok: cert));
+  if certTok = certToken then    (* Overenie certifikatu *)
+    let vkToken = pkOf(certTok) in
+
+    (* sprava 3 tvorba, tvorime casovu peciatku a relacny kluc *)
+    new ts_raw: bitstring;
+    let ts = toTimestamp(ts_raw) in
+    new skey: key;
+    new idA: id;
+
+    (* sprava 3 odoslanie *)
+    let tokenMsg = (ts_raw, skey, idB, idA) in
+    let encToken = encrypt(tokenMsg, vkToken) in
+    out(c, (encToken, certPC));
+
+    (* sprava 4 prijem *)
+    in(c, encB: bitstring);
+    let (ts1_recv: timestamp, idB1: id, idA1: id, nonceB: bitstring, sigB: bitstring) = decrypt(encB, skey) in
+
+    (* Overenie ci vieme skonstruovat zo spravy 4 hash ktory token podpisal *)
+    if (ts1_recv = ts_add1(ts)) && (idB1 = idB) && (idA1 = idA) && 
+       verify(sigB, hash((ts1_recv, idB1, idA1, nonceB)), vkToken) = hash((ts1_recv, idB1, idA1, nonceB)) then
+
+      event begin_A(idA1, idB1, skey);
+
+      (* sprava 5 odoslanie *)
+      let ts2 = ts_add2(ts) in
+      let msgA = (ts2, idB1, idA1, nonceB) in
+      let encPayload = encrypt(msgA, skey) in
+      let sigHash = sign(hash(msgA), kPC) in
+      out(c, (encPayload, sigHash));
+
+      (* sprava 6 prijem *)
+      in(c, encFinal: bitstring);
+      let (ts3_recv: timestamp, idB2: id, idA2: id, kfinal: key) = decrypt(encFinal, skey) in
+      if (ts3_recv = ts_add3(ts)) && (idB2 = idB1) && (idA2 = idA1) then
+        event end_A(idA2, idB2, skey)
+      else 0
+    else 0
+  else 0.
+
+(* Bezpecnostny token: B *)
+let B() =
+  (* sprava 1 prijem *)
+  in(c, initMsg: bitstring);
+
+  (* sprava 2 odoslanie *)
+  new idB: id;
+  out(c, (initMsg, idB, certToken));
+
+  (* sprava 3 prijem *)
+  in(c, (encToken: bitstring, certFromA: cert));
+  if certFromA = certPC then    (* Overenie certifikatu *)
+    let vkFromA = pkOf(certFromA) in
+    let (ts_raw: bitstring, skey: key, idB1: id, idA: id) = decrypt(encToken, kToken) in
+    let ts = toTimestamp(ts_raw) in
+
+    (* sprava 4 odoslanie *)
+    new nonceB: bitstring;
+    let ts1 = ts_add1(ts) in
+    let sigB = sign(hash((ts1, idB1, idA, nonceB)), kToken) in (* tvorba hashu zo spravy 4 a jej podpis*)
+    let msgB = (ts1, idB1, idA, nonceB, sigB) in
+    let encB = encrypt(msgB, skey) in
+    out(c, encB);
+    event begin_B(idA, idB1, skey);
+
+    (* sprava 5 prijem *)
+    in(c, (encPayload: bitstring, sigHash: bitstring));
+    let (ts2_recv: timestamp, idB2: id, idA2: id, nonceB_check: bitstring) = decrypt(encPayload, skey) in
+    let msgBverify = (ts2_recv, idB2, idA2, nonceB_check) in
+    if (nonceB_check = nonceB) && (idB2 = idB1) && (idA2 = idA) then
+      if verify(sigHash, hash(msgBverify), vkFromA) = hash(msgBverify) then
+	    (* sprava 6 odoslanie*)
+        new keyToSend: key;
+        event end_B(idA2, idB2, skey);
+        let ts3 = ts_add3(ts) in
+        let msgFinal = (ts3, idB2, idA2, keyToSend) in
+        let encFinal = encrypt(msgFinal, skey) in
+        out(c, encFinal)
+      else 0
+	else 0
+  else 0.
+
+(* Spustenie protokolu *)
+process
+  (A() | B())
