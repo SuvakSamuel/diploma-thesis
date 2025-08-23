@@ -1,0 +1,20 @@
+#!/bin/sh
+
+
+tpmValue=$(tpm2_unseal -c 0x81001001 -p pcr:sha256:0,2,3,7)
+if [ $? -ne 0 ]; then
+    echo "tpm2_unseal fail"
+    exit 1
+fi
+
+tokenValue=$(./serialCommApp)
+if [ $? -ne 0 ]; then
+    echo "serialCommApp fail"
+    exit 1
+fi
+
+./combiner "$tpmValue" "$tokenValue"
+if [ $? -eq 0 ]; then
+    exit 0
+fi
+exit 1
